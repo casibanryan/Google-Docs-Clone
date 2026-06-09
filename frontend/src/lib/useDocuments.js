@@ -1,6 +1,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useDocumentStore } from '@/store/documentStore'
 import { useUserStore } from '@/store/userStore'
+import { useShareStore } from '@/store/shareStore'
 
 const STORAGE_KEY = 'ajaia-docs-v1'
 const selectedId = ref(null)
@@ -48,7 +49,7 @@ function persistState() {
 export default function useDocuments() {
   const documentStore = useDocumentStore()
   const userStore = useUserStore()
-
+  const shareStore = useShareStore()
   const currentUser = computed(() => userStore.currentUser)
   const users = computed(() => userStore.users)
 
@@ -64,15 +65,15 @@ export default function useDocuments() {
     )
   })
   const activeSharedUsers = computed(() => {
-    if (!activeDoc.value || !activeDoc.value.sharedWith) return []
+    if (!activeDoc.value || !activeDoc.value.sharedWith) {
+      return []
+    }
     return activeDoc.value.sharedWith
-      .map((id) => users.value.find((user) => user.id === id))
-      .filter(Boolean)
   })
   const availableShareUsers = computed(() => {
     if (!activeDoc.value || !currentUser.value) return []
     return users.value.filter(
-      (user) => user.id !== currentUser.value.id && !(activeDoc.value.sharedWith || []).includes(user.id)
+      (user) => user.id !== currentUser.value.id && !(activeDoc.value.sharedWith || []).some((u) => u.id === user.id)
     )
   })
   const isOwner = computed(() => activeDoc.value?.user_id === currentUser.value?.id)
@@ -184,18 +185,25 @@ export default function useDocuments() {
     shareModalOpen.value = false
   }
 
-  function shareDocument(userId) {
-    if (!activeDoc.value || !userId) return
-    if (!activeDoc.value.sharedWith.includes(userId)) {
-      activeDoc.value.sharedWith.push(userId)
+  function shareDocument(user) {
+    if (!activeDoc.value || !user.id) return
+    if (!activeDoc.value.sharedWith.includes(user.id)) {
+      activeDoc.value.sharedWith.push({
+        id: user.id,
+        name: user.name
+      })
       activeDoc.value.updatedAt = new Date().toISOString()
+
+      shareStore.add(activeDoc.value.id, user.id)
     }
   }
 
   function removeSharedUser(userId) {
     if (!activeDoc.value) return
-    activeDoc.value.sharedWith = activeDoc.value.sharedWith.filter((id) => id !== userId)
+    activeDoc.value.sharedWith = activeDoc.value.sharedWith.filter((u) => u.id !== userId)
     activeDoc.value.updatedAt = new Date().toISOString()
+
+    shareStore.remove(userId, activeDoc.value.id)
   }
 
   watch([selectedId], () => {

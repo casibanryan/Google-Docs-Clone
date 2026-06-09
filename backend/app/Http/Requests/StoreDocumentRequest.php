@@ -17,7 +17,6 @@ class StoreDocumentRequest extends FormRequest
         return [
             'user_id' => 'required|exists:users,id',
             'title' => 'nullable|string|max:255',
-            'excerpt' => 'nullable|string',
             'content' => 'nullable|string',
             'meta' => 'nullable|array',
             'is_public' => 'sometimes|boolean',

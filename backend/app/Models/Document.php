@@ -14,7 +14,6 @@ class Document extends Model
     protected $fillable = [
         'user_id',
         'title',
-        'excerpt',
         'content',
         'meta',
         'is_public',
@@ -28,5 +27,17 @@ class Document extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function owner()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function sharedUsers()
+    {
+        return $this->belongsToMany(User::class, 'document_shares')
+            ->using(ShareDocument::class)
+            ->whereNull('document_shares.deleted_at');
     }
 }

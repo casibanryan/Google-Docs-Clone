@@ -21,11 +21,16 @@ class User extends Authenticatable
      *
      * @return array<string, string>
      */
-    // protected function casts(): array
-    // {
-    //     return [
-    //         'email_verified_at' => 'datetime',
-    //         'password' => 'hashed',
-    //     ];
-    // }
+    public function documents()
+    {
+        return $this->hasMany(Document::class, 'user_id');
+    }
+
+    public function sharedDocuments()
+    {
+        return $this->belongsToMany(Document::class, 'document_shares')
+            ->using(ShareDocument::class)
+            ->whereNull('document_shares.deleted_at');
+    }
+
 }

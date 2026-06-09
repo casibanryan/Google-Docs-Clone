@@ -16,7 +16,6 @@ class UpdateDocumentRequest extends FormRequest
     {
         return [
             'title' => 'nullable|string|max:255',
-            'excerpt' => 'nullable|string',
             'content' => 'nullable|string',
             'meta' => 'nullable|array',
             'is_public' => 'sometimes|boolean',

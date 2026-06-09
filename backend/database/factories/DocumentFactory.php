@@ -15,7 +15,6 @@ class DocumentFactory extends Factory
         return [
             'user_id' => User::factory(),
             'title' => $this->faker->sentence,
-            'excerpt' => $this->faker->paragraph,
             'content' => '<p>' . implode('</p><p>', $this->faker->paragraphs(3)) . '</p>',
             'meta' => [],
             'is_public' => $this->faker->boolean(20),

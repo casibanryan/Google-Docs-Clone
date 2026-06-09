@@ -21,8 +21,7 @@ class DocumentController extends Controller
             $query->where('title', 'like', "%{$q}%");
         }
 
-        $documents = $query->latest()->paginate(15);
-
+        $documents = $query->with('sharedUsers')->latest()->paginate(15);
         return $this->success(DocumentResource::collection($documents));
     }
 

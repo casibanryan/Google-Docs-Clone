@@ -52,11 +52,10 @@ const emits = defineEmits(['close', 'share-user', 'remove-user'])
                 <button
                   v-for="user in props.availableShareUsers"
                   :key="user.id"
-                  @click="$emit('share-user', user.id)"
+                  @click="$emit('share-user', user)"
                   class="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-sm text-slate-800 transition hover:border-slate-400 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:hover:bg-slate-800"
                 >
                   <span>{{ user.name }}</span>
-                  <span class="text-slate-500 dark:text-slate-400">{{ user.email }}</span>
                 </button>
               </template>
               <p v-else class="rounded-3xl bg-slate-100 px-4 py-3 text-sm text-slate-500 dark:bg-slate-800 dark:text-slate-400">All teammates already have access.</p>
