@@ -81,17 +81,17 @@ export default function useDocuments() {
     selectedId.value = docId
   }
 
-  function createDocument() {
+  async function createDocument() {
     if (!currentUser.value) {
       uploadMessage.value = 'Please create a user before adding documents.'
       return
     }
 
     const doc = makeDoc('Untitled document', currentUser.value.id)
-    documentStore.createDocument(doc).catch(() => {
+    const data = await documentStore.createDocument(doc).catch(() => {
       documentStore.documents.unshift(doc)
     })
-    selectedId.value = doc.id
+    selectedId.value = data.id
     shareModalOpen.value = false
   }
 

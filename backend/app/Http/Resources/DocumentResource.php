@@ -17,7 +17,7 @@ class DocumentResource extends JsonResource
             'meta' => $this->meta,
             'is_public' => (bool) $this->is_public,
             'created_at' => optional($this->created_at)->toDateTimeString(),
-            'updated_at' => optional($this->updated_at)->toDateTimeString(),
+            'updatedAt' => optional($this->updated_at)->toDateTimeString(),
         ];
     }
 }
