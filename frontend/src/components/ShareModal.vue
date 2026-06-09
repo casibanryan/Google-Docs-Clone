@@ -69,7 +69,7 @@ const emits = defineEmits(['close', 'share-user', 'remove-user'])
           <div class="mt-4 space-y-3 rounded-3xl bg-white p-4 shadow-sm dark:bg-slate-950">
             <p class="text-sm text-slate-700 dark:text-slate-200">Select a teammate to grant view access to this document. Shared documents appear in their sidebar under "Shared with me".</p>
             <div class="mt-4 rounded-3xl bg-slate-100 p-3 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-              Current user: <strong>{{ props.currentUser.email }}</strong>
+              Current user: <strong>{{ props.currentUser.name }}</strong>
             </div>
           </div>
         </Card>

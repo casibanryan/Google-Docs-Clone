@@ -1,194 +1,230 @@
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
+import { useDocumentStore } from '@/store/documentStore'
+import { useUserStore } from '@/store/userStore'
 
 const STORAGE_KEY = 'ajaia-docs-v1'
-export const CURRENT_USER = { id: 'user-1', name: 'Alex', email: 'alex@ajaia.test' }
-export const USERS = [
-  CURRENT_USER,
-  { id: 'user-2', name: 'Casey', email: 'casey@ajaia.test' },
-  { id: 'user-3', name: 'Morgan', email: 'morgan@ajaia.test' },
-]
-
-const docs = ref([])
 const selectedId = ref(null)
 const shareModalOpen = ref(false)
 const uploadMessage = ref('Supports .txt and .md imports')
 
-const activeDoc = computed(() => docs.value.find((doc) => doc.id === selectedId.value) || null)
-const ownedDocs = computed(() => docs.value.filter((doc) => doc.ownerId === CURRENT_USER.id))
-const sharedDocs = computed(
-  () => docs.value.filter((doc) => doc.ownerId !== CURRENT_USER.id && doc.sharedWith.includes(CURRENT_USER.id))
-)
-const activeSharedUsers = computed(() => {
-  if (!activeDoc.value) return []
-  return activeDoc.value.sharedWith
-    .map((id) => USERS.find((user) => user.id === id))
-    .filter(Boolean)
-})
-const availableShareUsers = computed(() => {
-  if (!activeDoc.value) return []
-  return USERS.filter(
-    (user) => user.id !== CURRENT_USER.id && !activeDoc.value.sharedWith.includes(user.id)
-  )
-})
-const isOwner = computed(() => activeDoc.value?.ownerId === CURRENT_USER.id)
-
-function makeDoc(title, ownerId, content = '<p>Start writing your document here.</p>') {
+function makeDoc(title, userId, content = '<p>Start writing your document here.</p>') {
   return {
     id: `doc-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     title,
     content,
-    ownerId,
+    user_id: userId,
     sharedWith: [],
-    updatedAt: new Date().toISOString(),
+    excerpt: null,
+    meta: null,
+    is_public: false,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   }
 }
 
-function loadState() {
+function loadState(store) {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw)
-      docs.value = parsed.docs || []
-      selectedId.value = parsed.selectedId || (docs.value[0] && docs.value[0].id)
+      selectedId.value = parsed.selectedId
     }
   } catch (error) {
-    docs.value = []
+    console.error('Error loading state:', error)
   }
 
-  if (!docs.value.length) {
-    const starter = makeDoc(
-      'Welcome to Ajaia Docs',
-      CURRENT_USER.id,
-      '<p>Use the sidebar to create a new document or upload a file.</p>'
-    )
-    docs.value = [starter]
-    selectedId.value = starter.id
+  if (!selectedId.value && store.documents.length > 0) {
+    selectedId.value = store.documents[0].id
   }
 }
 
 function persistState() {
   localStorage.setItem(
     STORAGE_KEY,
-    JSON.stringify({ docs: docs.value, selectedId: selectedId.value })
+    JSON.stringify({ selectedId: selectedId.value })
   )
 }
 
-function selectDoc(docId) {
-  selectedId.value = docId
-}
+export default function useDocuments() {
+  const documentStore = useDocumentStore()
+  const userStore = useUserStore()
 
-function createDocument() {
-  const doc = makeDoc('Untitled document', CURRENT_USER.id)
-  docs.value.unshift(doc)
-  selectedId.value = doc.id
-  shareModalOpen.value = false
-}
+  const currentUser = computed(() => userStore.currentUser)
+  const users = computed(() => userStore.users)
 
-function updateTitle(event) {
-  if (!activeDoc.value) return
-  activeDoc.value.title = event.target.value
-  activeDoc.value.updatedAt = new Date().toISOString()
-}
+  const activeDoc = computed(() => documentStore.documents.find((doc) => doc.id === selectedId.value) || null)
+  const ownedDocs = computed(() => {
+    if (!currentUser.value) return []
+    return documentStore.documents.filter((doc) => doc.user_id === currentUser.value.id)
+  })
+  const sharedDocs = computed(() => {
+    if (!currentUser.value) return []
+    return documentStore.documents.filter(
+      (doc) => doc.user_id !== currentUser.value.id && (doc.sharedWith || []).includes(currentUser.value.id)
+    )
+  })
+  const activeSharedUsers = computed(() => {
+    if (!activeDoc.value || !activeDoc.value.sharedWith) return []
+    return activeDoc.value.sharedWith
+      .map((id) => users.value.find((user) => user.id === id))
+      .filter(Boolean)
+  })
+  const availableShareUsers = computed(() => {
+    if (!activeDoc.value || !currentUser.value) return []
+    return users.value.filter(
+      (user) => user.id !== currentUser.value.id && !(activeDoc.value.sharedWith || []).includes(user.id)
+    )
+  })
+  const isOwner = computed(() => activeDoc.value?.user_id === currentUser.value?.id)
 
-function updateContent(html) {
-  if (!activeDoc.value || typeof html !== 'string') return
-  activeDoc.value.content = html
-  activeDoc.value.updatedAt = new Date().toISOString()
-}
-
-function handleFileUpload(event) {
-  const file = event.target.files?.[0]
-  if (!file) {
-    uploadMessage.value = 'No file selected.'
-    return
+  function selectDoc(docId) {
+    selectedId.value = docId
   }
 
-  const supported = ['txt', 'md']
-  const extension = file.name.split('.').pop().toLowerCase()
+  function createDocument() {
+    if (!currentUser.value) {
+      uploadMessage.value = 'Please create a user before adding documents.'
+      return
+    }
 
-  if (!supported.includes(extension)) {
-    uploadMessage.value = 'Only .txt and .md files are supported right now.'
-    event.target.value = ''
-    return
+    const doc = makeDoc('Untitled document', currentUser.value.id)
+    documentStore.createDocument(doc).catch(() => {
+      documentStore.documents.unshift(doc)
+    })
+    selectedId.value = doc.id
+    shareModalOpen.value = false
   }
 
-  const reader = new FileReader()
-  reader.onload = () => {
-    const raw = String(reader.result || '')
-    const content = `<div>${raw
-      .split(/\r?\n/)
-      .map((line) => `<p>${line || '&nbsp;'}</p>`)
-      .join('')}</div>`
-    // If there's an active document, import into the existing draft instead
-    if (activeDoc.value) {
-      activeDoc.value.content = (activeDoc.value.content || '') + content
-      activeDoc.value.updatedAt = new Date().toISOString()
-      uploadMessage.value = `Imported ${file.name} into ${activeDoc.value.title}`
-      // Notify any open editor to insert at caret if focused
-      try {
-        window.dispatchEvent(new CustomEvent('ajaia:importContent', { detail: { html: content } }))
-      } catch (err) {
-        // ignore (non-browser environments)
-      }
+  function updateTitle(event) {
+    if (!activeDoc.value) return
+    activeDoc.value.title = event.target.value
+    activeDoc.value.updatedAt = new Date().toISOString()
+
+    documentStore.updateDocument(activeDoc.value.id, {
+      title: activeDoc.value.title,
+      updatedAt: activeDoc.value.updatedAt,
+    }).catch((err) => {
+      console.error('Failed to update title:', err)
+    })
+  }
+
+  function updateContent(html) {
+    if (!activeDoc.value || typeof html !== 'string') return
+    activeDoc.value.content = html
+    activeDoc.value.updatedAt = new Date().toISOString()
+
+    documentStore.updateDocument(activeDoc.value.id, {
+      content: activeDoc.value.content,
+      updatedAt: activeDoc.value.updatedAt,
+    }).catch((err) => {
+      console.error('Failed to update content:', err)
+    })
+  }
+
+  function handleFileUpload(event) {
+    const file = event.target.files?.[0]
+    if (!file) {
+      uploadMessage.value = 'No file selected.'
+      return
+    }
+
+    const supported = ['txt', 'md']
+    const extension = file.name.split('.').pop().toLowerCase()
+
+    if (!supported.includes(extension)) {
+      uploadMessage.value = 'Only .txt and .md files are supported right now.'
       event.target.value = ''
       return
     }
 
-    // Fallback: create a new document when no active doc
-    const doc = makeDoc(file.name.replace(/\.[^/.]+$/, ''), CURRENT_USER.id, content)
-    docs.value.unshift(doc)
-    selectedId.value = doc.id
-    uploadMessage.value = `Imported ${file.name}`
-    event.target.value = ''
+    const reader = new FileReader()
+    reader.onload = () => {
+      const raw = String(reader.result || '')
+      const content = `<div>${raw
+        .split(/\r?\n/)
+        .map((line) => `<p>${line || '&nbsp;'}</p>`)
+        .join('')}</div>`
+
+      if (activeDoc.value) {
+        activeDoc.value.content = (activeDoc.value.content || '') + content
+        activeDoc.value.updatedAt = new Date().toISOString()
+        uploadMessage.value = `Imported ${file.name} into ${activeDoc.value.title}`
+        try {
+          window.dispatchEvent(new CustomEvent('ajaia:importContent', { detail: { html: content } }))
+        } catch (err) {
+          // ignore (non-browser environments)
+        }
+        event.target.value = ''
+        return
+      }
+
+      if (!currentUser.value) {
+        uploadMessage.value = 'Please create a user before importing documents.'
+        event.target.value = ''
+        return
+      }
+
+      const doc = makeDoc(file.name.replace(/\.[^/.]+$/, ''), currentUser.value.id, content)
+      documentStore.createDocument(doc).catch(() => {
+        documentStore.documents.unshift(doc)
+      })
+      selectedId.value = doc.id
+      uploadMessage.value = `Imported ${file.name}`
+      event.target.value = ''
+    }
+    reader.readAsText(file)
   }
-  reader.readAsText(file)
-}
 
-function openShareModal() {
-  if (!activeDoc.value) return
-  shareModalOpen.value = true
-}
+  function openShareModal() {
+    if (!activeDoc.value) return
+    shareModalOpen.value = true
+  }
 
-function closeShareModal() {
-  shareModalOpen.value = false
-}
+  function closeShareModal() {
+    shareModalOpen.value = false
+  }
 
-function shareDocument(userId) {
-  if (!activeDoc.value || !userId) return
-  if (!activeDoc.value.sharedWith.includes(userId)) {
-    activeDoc.value.sharedWith.push(userId)
+  function shareDocument(userId) {
+    if (!activeDoc.value || !userId) return
+    if (!activeDoc.value.sharedWith.includes(userId)) {
+      activeDoc.value.sharedWith.push(userId)
+      activeDoc.value.updatedAt = new Date().toISOString()
+    }
+  }
+
+  function removeSharedUser(userId) {
+    if (!activeDoc.value) return
+    activeDoc.value.sharedWith = activeDoc.value.sharedWith.filter((id) => id !== userId)
     activeDoc.value.updatedAt = new Date().toISOString()
   }
-}
 
-function removeSharedUser(userId) {
-  if (!activeDoc.value) return
-  activeDoc.value.sharedWith = activeDoc.value.sharedWith.filter((id) => id !== userId)
-  activeDoc.value.updatedAt = new Date().toISOString()
-}
+  watch([selectedId], () => {
+    persistState()
+  }, { deep: true })
 
-onMounted(() => {
-  loadState()
-})
+  onMounted(async () => {
+    try {
+      await documentStore.fetchDocuments()
+      loadState(documentStore)
+    } catch (err) {
+      console.error('Failed to fetch documents:', err)
+      loadState(documentStore)
+    }
+  })
 
-watch([docs, selectedId], () => {
-  persistState()
-}, { deep: true })
-
-export default function useDocuments() {
   return {
-    docs,
+    docs: computed(() => documentStore.documents),
     selectedId,
     shareModalOpen,
     uploadMessage,
-      activeDoc,
+    activeDoc,
     ownedDocs,
     sharedDocs,
     activeSharedUsers,
     availableShareUsers,
     isOwner,
-    CURRENT_USER,
-    USERS,
+    currentUser,
+    users,
     selectDoc,
     createDocument,
     updateTitle,
@@ -198,5 +234,7 @@ export default function useDocuments() {
     closeShareModal,
     shareDocument,
     removeSharedUser,
+    loading: computed(() => documentStore.loading),
+    error: computed(() => documentStore.error),
   }
 }

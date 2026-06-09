@@ -1,8 +1,16 @@
 <script setup>
+import { ref, computed, onMounted } from 'vue'
+import { useUserStore } from '@/store/userStore'
 import DocumentSidebar from '@/components/DocumentSidebar.vue'
 import DocumentEditor from '@/components/DocumentEditor.vue'
 import ShareModal from '@/components/ShareModal.vue'
+import UserPromptModal from '@/components/UserPromptModal.vue'
 import useDocuments from '@/lib/useDocuments.js'
+
+const userStore = useUserStore()
+const showUserPrompt = ref(false)
+const promptName = ref('')
+const promptError = ref('')
 
 const {
   selectedId,
@@ -13,19 +21,68 @@ const {
   sharedDocs,
   activeSharedUsers,
   availableShareUsers,
-  CURRENT_USER,
-  USERS,
+  currentUser,
+  users,
   selectDoc,
   createDocument,
   updateTitle,
   updateContent,
   handleFileUpload,
   openShareModal,
-  closeShareModal,
+closeShareModal,
   shareDocument,
   removeSharedUser,
   deleteDocument,
 } = useDocuments()
+
+const isUserReady = computed(() => !!userStore.currentUser)
+
+const initializeUser = async () => {
+  const browserId = userStore.loadBrowserId()
+  if (!browserId) {
+    showUserPrompt.value = true
+    return
+  }
+
+  try {
+    const existingUser = await userStore.findUserByBrowserId(browserId)
+    if (existingUser) {
+      userStore.setCurrentUser(existingUser)
+      return
+    }
+    showUserPrompt.value = true
+  } catch (error) {
+    console.error('Failed to initialize user:', error)
+    showUserPrompt.value = true
+  }
+}
+
+const handleUserSave = async (name) => {
+  if (!name || !name.trim()) {
+    promptError.value = 'Please enter a name.'
+    return
+  }
+
+  promptError.value = ''
+  const browserId = userStore.loadBrowserId() || crypto.randomUUID?.() || `browser-${Date.now()}-${Math.random().toString(16).slice(2)}`
+
+  try {
+    await userStore.ensureCurrentUser(browserId, name.trim())
+    showUserPrompt.value = false
+  } catch (error) {
+    console.error('Unable to save user:', error)
+    promptError.value = error?.message || 'Could not save your name. Please try again.'
+  }
+}
+
+const handlePromptClose = () => {
+  promptError.value = ''
+  showUserPrompt.value = false
+}
+
+onMounted(() => {
+  initializeUser()
+})
 </script>
 
 <template>
@@ -36,7 +93,7 @@ const {
         :sharedDocs="sharedDocs"
         :selectedId="selectedId"
         :uploadMessage="uploadMessage"
-        :users="USERS"
+        :users="users"
         @create-document="createDocument"
         @select-doc="selectDoc"
         @delete-doc="deleteDocument"
@@ -47,7 +104,7 @@ const {
         <template v-if="activeDoc">
           <DocumentEditor
             :activeDoc="activeDoc"
-            :currentUser="CURRENT_USER"
+            :currentUser="currentUser"
             :activeSharedUsers="activeSharedUsers"
             @update-title="updateTitle"
             @update-content="updateContent"
@@ -69,12 +126,20 @@ const {
     <ShareModal
       v-if="shareModalOpen"
       :activeDoc="activeDoc"
-      :currentUser="CURRENT_USER"
+      :currentUser="currentUser"
       :activeSharedUsers="activeSharedUsers"
       :availableShareUsers="availableShareUsers"
       @close="closeShareModal"
       @share-user="shareDocument"
       @remove-user="removeSharedUser"
+    />
+
+    <UserPromptModal
+      :show="showUserPrompt"
+      :defaultName="promptName"
+      :error="promptError"
+      @close="handlePromptClose"
+      @save="handleUserSave"
     />
   </div>
 </template>

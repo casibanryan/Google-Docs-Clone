@@ -89,7 +89,7 @@ const ownerName = (ownerId) => props.users?.find((user) => user.id === ownerId)?
             >
               <div>
                 <p class="text-sm font-semibold text-slate-900 dark:text-slate-100">{{ doc.title }}</p>
-                <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Owner: {{ ownerName(doc.ownerId) }}</p>
+                <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Owner: {{ ownerName(doc.user_id) }}</p>
               </div>
             </button>
           </template>
